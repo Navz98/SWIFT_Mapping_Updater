@@ -123,8 +123,8 @@ source_file = st.file_uploader("🌟 Upload Latest Mapping Excel File", type=[".
 test_file = st.file_uploader("🌟 Upload SWIFT Excel File", type=[".xlsx"])
 
 if source_file and test_file:
-    if st.button("Do the trick"):
-        with st.spinner("Making in Progress..."):
+    if st.button("Do the trick ✨"):
+        with st.spinner("🥁 Drum Rolls..."):
             result = process_excel(source_file, test_file)
             st.success("Ta Da! Click the below button to download.")
             st.download_button("📥 Download Updated Mapping Sheet", result, file_name="Updated_mapping_sheet.xlsx")
