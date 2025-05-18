@@ -119,3 +119,21 @@ if source_file and test_file:
             result = process_excel(source_file, test_file)
             st.success("Merge complete! Download below.")
             st.download_button("📥 Download Merged Excel", result, file_name="merged_output.xlsx")
+
+# Footer with trademark text centered at the bottom
+st.markdown("""
+    <style>
+    .footer {
+        position: fixed;
+        bottom: 10px;
+        width: 100%;
+        text-align: center;
+        color: grey;
+        font-size: 0.9rem;
+        font-family: 'Courier New', monospace;
+    }
+    </style>
+    <div class="footer">
+        © Crafted by Naveen
+    </div>
+""", unsafe_allow_html=True)
