@@ -134,6 +134,6 @@ st.markdown("""
     }
     </style>
     <div class="footer">
-         Crafted by Naveen
+         Designed by Naveen
     </div>
 """, unsafe_allow_html=True)
