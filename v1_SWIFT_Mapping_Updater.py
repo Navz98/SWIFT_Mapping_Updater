@@ -123,11 +123,11 @@ source_file = st.file_uploader("🌟 Upload Latest Mapping Excel File", type=[".
 test_file = st.file_uploader("🌟 Upload SWIFT Excel File", type=[".xlsx"])
 
 if source_file and test_file:
-    if st.button("Process and Export"):
-        with st.spinner("Processing..."):
+    if st.button("Do the trick"):
+        with st.spinner("Making in Progress..."):
             result = process_excel(source_file, test_file)
-            st.success("Mapping completed! Click the below button to download.")
-            st.download_button("📥 Download Merged Excel", result, file_name="merged_output.xlsx")
+            st.success("Ta Da! Click the below button to download.")
+            st.download_button("📥 Download Updated Mapping Sheet", result, file_name="Updated_mapping_sheet.xlsx")
 
 # Footer with trademark text centered at the bottom
 st.markdown("""
