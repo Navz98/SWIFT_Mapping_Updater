@@ -119,7 +119,7 @@ def process_excel(source_file, test_file):
     return output
 
 # Streamlit UI
-source_file = st.file_uploader("🌟 Upload Latest Mapping Sheet", type=[".xlsx"])
+source_file = st.file_uploader("🌟 Upload Latest Mapping Excel File", type=[".xlsx"])
 test_file = st.file_uploader("🌟 Upload SWIFT Excel File", type=[".xlsx"])
 
 if source_file and test_file:
