@@ -3,6 +3,15 @@ import pandas as pd
 from io import BytesIO
 
 st.set_page_config(page_title="Excel Merger App", layout="wide")
+
+# Add user-friendly notes/instructions
+st.markdown("""
+**Notes:**
+- Please verify if the sheets containing the mapping data has the column names in the first line
+- Please verify if the column names in both the sheets where mapping data exists is same
+- Incase of a sheet A having a column name with mapping data and sheet B not having the column, please create an empty column with same column name in sheet B.
+""")
+
 st.title("🚀 SWIFT Mapping Sheet Updater")
 
 # Helper Functions
