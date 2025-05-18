@@ -3,7 +3,7 @@ import pandas as pd
 from io import BytesIO
 
 st.set_page_config(page_title="Mapping Sheet Updater", layout="wide")
-st.title("🚀 SWIFT Mapping Sheet Updater")
+st.title("SWIFT Mapping Sheet Updater")
 
 # Helper Functions
 def strip_all_string_columns(df):
