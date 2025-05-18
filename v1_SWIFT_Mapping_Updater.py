@@ -3,7 +3,7 @@ import pandas as pd
 from io import BytesIO
 
 st.set_page_config(page_title="Excel Merger App", layout="wide")
-st.title("📄 XML Hierarchy Excel Merger")
+st.title("🚀 SWIFT Mapping Sheet Updater")
 
 # Helper Functions
 def strip_all_string_columns(df):
@@ -110,14 +110,14 @@ def process_excel(source_file, test_file):
     return output
 
 # Streamlit UI
-source_file = st.file_uploader("Upload Source Excel File", type=[".xlsx"])
-test_file = st.file_uploader("Upload Test Excel File", type=[".xlsx"])
+source_file = st.file_uploader("🌟 Upload Latest Mapping Sheet", type=[".xlsx"])
+test_file = st.file_uploader("🌟 Upload SWIFT Excel File", type=[".xlsx"])
 
 if source_file and test_file:
     if st.button("Process and Export"):
         with st.spinner("Processing..."):
             result = process_excel(source_file, test_file)
-            st.success("Merge complete! Download below.")
+            st.success("Mapping completed! Click the below button to download.")
             st.download_button("📥 Download Merged Excel", result, file_name="merged_output.xlsx")
 
 # Footer with trademark text centered at the bottom
