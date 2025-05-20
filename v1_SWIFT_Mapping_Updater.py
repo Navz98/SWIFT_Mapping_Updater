@@ -55,7 +55,7 @@ def process_excel(source_file, test_file):
 
     source_output_columns = [
         col for col in source_df.columns
-        if col not in ['Hierarchy Path', 'XML Tag', 'Level', 'Lvl'] and not (isinstance(col, str) and col.startswith('Unnamed'))
+        if col not in ['Hierarchy Path', 'XML Tag', 'Level', 'Lvl'] and not col.startswith('Unnamed')
     ]
 
     merge_columns = ['Hierarchy Path', 'XML Tag'] + source_output_columns
