@@ -145,8 +145,6 @@ def process_excel(source_file, test_file):
             "Meaning": ["Changed", "New in Test", "Missing in Test"]
         })
         legend_df.to_excel(writer, sheet_name="Legend", index=False)
-        
-        writer.save()  # explicitly save the writer to flush data into BytesIO
 
     output.seek(0)
     wb = load_workbook(output)
