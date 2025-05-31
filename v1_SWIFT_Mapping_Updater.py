@@ -72,6 +72,7 @@ def process_excel(source_file, test_file):
 
     differences = []
 
+    # 1. Cell-level differences (using test sheet columns only)
     for _, row in merged.iterrows():
         for col in test_output_columns:
             test_val = str(row.get(col, "")).strip()
@@ -86,6 +87,7 @@ def process_excel(source_file, test_file):
                     "Type": "Changed"
                 })
 
+    # 2. New rows in test
     source_keys = set(zip(source_clean['Hierarchy Path'], source_clean['XML Tag']))
     for _, row in test_clean.iterrows():
         key = (row['Hierarchy Path'], row['XML Tag'])
@@ -100,6 +102,7 @@ def process_excel(source_file, test_file):
                     "Type": "New in Test"
                 })
 
+    # 3. Missing rows in test
     test_keys = set(zip(test_clean['Hierarchy Path'], test_clean['XML Tag']))
     for _, row in source_clean.iterrows():
         key = (row['Hierarchy Path'], row['XML Tag'])
@@ -116,11 +119,12 @@ def process_excel(source_file, test_file):
 
     differences_df = pd.DataFrame(differences)
 
+    # IMPORTANT: Do NOT drop 'Hierarchy Path' here, keep it for coloring
+    # merged.drop(columns=['Hierarchy Path'], inplace=True)  # <-- Commented out to keep column for coloring
+
     merged.drop(columns=[f"{col}_source" for col in source_output_columns if f"{col}_source" in merged.columns], inplace=True)
     merged = merged.astype(str).replace("nan", "")
     merged = merged.replace({r'_x000D_': ' ', r'\r': ' ', r'\n': ' '}, regex=True)
-    if 'Hierarchy Path' in merged.columns:
-        merged.drop(columns=['Hierarchy Path'], inplace=True)
 
     stripped_source_export = source_df.copy()
     if 'Hierarchy Path' in stripped_source_export.columns:
@@ -134,6 +138,8 @@ def process_excel(source_file, test_file):
         merged.to_excel(writer, sheet_name='New Mapping', index=False)
         if not differences_df.empty:
             differences_df.to_excel(writer, sheet_name='Differences', index=False)
+
+        # No save here, we'll save after coloring
 
     output.seek(0)
     wb = load_workbook(output)
@@ -153,7 +159,8 @@ def process_excel(source_file, test_file):
         if not col_idx:
             continue
         for row in ws.iter_rows(min_row=2):
-            row_path = str(row[header_map["Hierarchy Path"] - 1].value).strip() if "Hierarchy Path" in header_map else ""
+            # Match rows by Hierarchy Path and XML Tag
+            row_path = str(row[header_map["Hierarchy Path"] - 1].value).strip()
             row_tag = str(row[header_map["XML Tag"] - 1].value).strip()
             if row_path == path and row_tag == tag:
                 cell = row[col_idx - 1]
@@ -164,6 +171,10 @@ def process_excel(source_file, test_file):
                 elif dtype == "Missing in Test":
                     cell.fill = red
                 break
+
+    # Now remove the 'Hierarchy Path' column from the worksheet AFTER coloring
+    if 'Hierarchy Path' in header_map:
+        ws.delete_cols(header_map['Hierarchy Path'])
 
     final_output = BytesIO()
     wb.save(final_output)
