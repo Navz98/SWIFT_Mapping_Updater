@@ -5,7 +5,6 @@ from io import BytesIO
 st.set_page_config(page_title="Mapping Sheet Updater", layout="wide")
 st.title("SWIFT Mapping Sheet Updater")
 
-# Helper Functions
 def strip_all_string_columns(df):
     for col in df.columns:
         if df[col].dtype == 'object':
@@ -53,72 +52,75 @@ def process_excel(source_file, test_file):
     source_df = build_path_column(source_df)
     test_df = build_path_column(test_df)
 
-    # Columns to merge on
+    # Columns to compare (exclude keys and structural columns)
+    exclude_cols = ['Hierarchy Path', 'XML Tag', 'Level', 'Lvl']
+    source_cols = [col for col in source_df.columns if col not in exclude_cols and not (isinstance(col, str) and col.startswith('Unnamed'))]
+
     key_cols = ['Hierarchy Path', 'XML Tag']
-    # Columns in source to compare
-    source_cols = [
-        col for col in source_df.columns
-        if col not in key_cols + ['Level', 'Lvl']
-        and not (isinstance(col, str) and col.startswith('Unnamed'))
-    ]
 
-    # Ensure all comparison columns are strings with no NaNs
-    source_df[source_cols] = source_df[source_cols].fillna("").astype(str).applymap(str.strip)
-    test_df[source_cols] = test_df[source_cols].fillna("").astype(str).applymap(str.strip)
+    # Normalize strings: replace nan/None with empty strings for consistent comparison
+    for df in [source_df, test_df]:
+        df[source_cols] = df[source_cols].fillna("").astype(str).applymap(str.strip)
+        df[key_cols] = df[key_cols].fillna("").astype(str).applymap(str.strip)
 
-    # Drop duplicates in source on keys
-    source_clean = source_df[key_cols + source_cols].drop_duplicates(subset=key_cols)
-
-    # Merge
+    # Perform full outer merge on keys to capture all rows
     merged = pd.merge(
-        test_df,
-        source_clean,
+        source_df[key_cols + source_cols],
+        test_df[key_cols + source_cols],
         on=key_cols,
-        how='left',
-        suffixes=('', '_source')
+        how='outer',
+        suffixes=('_source', '_test'),
+        indicator=True  # To track where row came from
     )
 
-    # Build differences DataFrame
-    differences = []
-    for _, row in merged.iterrows():
-        for col in source_cols:
-            test_val = str(row.get(col, "")).strip()
-            source_val = str(row.get(f"{col}_source", "")).strip()
-            if test_val != source_val:
-                differences.append({
-                    "Hierarchy Path": row.get("Hierarchy Path", ""),
-                    "XML Tag": row.get("XML Tag", ""),
-                    "Column": col,
-                    "Test Value": test_val,
-                    "Source Value": source_val
-                })
+    # Function to detect changes per row
+    def detect_change(row):
+        if row['_merge'] == 'left_only':
+            return 'Deleted in Test'
+        elif row['_merge'] == 'right_only':
+            return 'Added in Test'
+        else:
+            # Check if any column differs
+            for col in source_cols:
+                if row[f"{col}_source"] != row[f"{col}_test"]:
+                    return 'Modified'
+            return 'Unchanged'
 
-    differences_df = pd.DataFrame(differences)
+    merged['Change Type'] = merged.apply(detect_change, axis=1)
 
-    # Drop source columns from merged
-    merged.drop(columns=[f"{col}_source" for col in source_cols if f"{col}_source" in merged.columns], inplace=True)
+    # Optional: filter out unchanged rows if you want
+    # merged = merged[merged['Change Type'] != 'Unchanged']
 
-    # Clean merged output
-    merged = merged.astype(str).replace("nan", "")
-    merged = merged.replace({r'_x000D_': ' ', r'\r': ' ', r'\n': ' '}, regex=True)
+    # Clean up _merge column as no longer needed
+    merged.drop(columns=['_merge'], inplace=True)
 
-    # Clean stripped source export
+    # Clean unwanted control characters globally
+    for col in merged.columns:
+        if merged[col].dtype == object:
+            merged[col] = merged[col].str.replace(r'_x000D_|[\r\n]', ' ', regex=True)
+
+    # Prepare stripped source for export
     stripped_source_export = source_df.copy()
     if 'Hierarchy Path' in stripped_source_export.columns:
         stripped_source_export.drop(columns=['Hierarchy Path'], inplace=True)
-    stripped_source_export = stripped_source_export.replace("nan", "").replace({pd.NA: "", None: ""}).fillna("")
+    stripped_source_export = stripped_source_export.replace({pd.NA: "", None: "", "nan": ""}).fillna("")
     stripped_source_export = stripped_source_export.replace({r'_x000D_': ' ', r'\r': ' ', r'\n': ' '}, regex=True)
 
-    # Write to Excel
     output = BytesIO()
     with pd.ExcelWriter(output, engine='openpyxl') as writer:
+        # Write original source sheets
         for sheet_name, df in source_excel.items():
             df.to_excel(writer, sheet_name=sheet_name[:31], index=False)
 
         stripped_source_export.to_excel(writer, sheet_name='Stripped Source', index=False)
-        merged.to_excel(writer, sheet_name='Merged Output', index=False)
-        if not differences_df.empty:
-            differences_df.to_excel(writer, sheet_name='Differences', index=False)
+
+        # Write merged output (test + matched source columns, without _test/_source suffixes)
+        # We can write test_df as merged output here if you want:
+        test_output_cols = [col for col in test_df.columns if col != 'Hierarchy Path']
+        test_df.to_excel(writer, sheet_name='Merged Output', index=False)
+
+        # Write the difference tracking sheet
+        merged.to_excel(writer, sheet_name='Tracking Differences', index=False)
 
     output.seek(0)
     return output
