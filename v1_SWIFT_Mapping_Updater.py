@@ -116,7 +116,7 @@ def process_excel(source_file, test_file):
     output = BytesIO()
     with pd.ExcelWriter(output, engine='openpyxl') as writer:
         stripped_source_export.to_excel(writer, sheet_name='Source', index=False)
-        merged.to_excel(writer, sheet_name='Merged Output', index=False)
+        merged.to_excel(writer, sheet_name='New Mapping', index=False)
         if not differences_df.empty:
             differences_df.to_excel(writer, sheet_name='Differences', index=False)
 
