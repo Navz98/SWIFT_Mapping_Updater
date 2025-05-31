@@ -160,25 +160,29 @@ def process_excel(source_file, test_file):
     red = PatternFill(start_color="FFC7CE", end_color="FFC7CE", fill_type="solid")     # Missing
 
     for _, diff in differences_df.iterrows():
-        path = diff["Hierarchy Path"]
-        tag = diff["XML Tag"]
-        column = diff["Column"]
+        path = str(diff["Hierarchy Path"]).strip()
+        tag = str(diff["XML Tag"]).strip()
+        column = str(diff["Column"]).strip()
         dtype = diff["Type"]
 
-        for row in ws.iter_rows(min_row=2):  # Skip header
-            row_path = row[headers.get("Hierarchy Path", 0) - 1].value
-            row_tag = row[headers.get("XML Tag", 0) - 1].value
+        col_idx = headers.get(column)
+        if not col_idx:
+            continue  # skip if column isn't found
+
+        for row in ws.iter_rows(min_row=2):  # skip header
+            row_path = str(row[headers.get("Hierarchy Path", 0) - 1].value).strip()
+            row_tag = str(row[headers.get("XML Tag", 0) - 1].value).strip()
 
             if row_path == path and row_tag == tag:
-                col_idx = headers.get(column)
-                if col_idx:
-                    cell = row[col_idx - 1]
-                    if dtype == "Changed":
-                        cell.fill = yellow
-                    elif dtype == "New in Test":
-                        cell.fill = blue
-                    elif dtype == "Missing in Test":
-                        cell.fill = red
+                cell = row[col_idx - 1]
+                if dtype == "Changed":
+                    cell.fill = yellow
+                elif dtype == "New in Test":
+                    cell.fill = blue
+                elif dtype == "Missing in Test":
+                    cell.fill = red
+                break  # once match is found, break inner loop
+
 
     final_output = BytesIO()
     wb.save(final_output)
