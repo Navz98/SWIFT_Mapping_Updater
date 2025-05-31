@@ -102,17 +102,20 @@ def process_excel(source_file, test_file):
 
     output = BytesIO()
     with pd.ExcelWriter(output, engine='openpyxl') as writer:
-        # Write original source sheets
-        for sheet_name, df in source_excel.items():
-            df.to_excel(writer, sheet_name=sheet_name[:31], index=False)
-    
-        # ✅ Write stripped and cleaned source data used in merge
-        stripped_source_export = source_df.copy()
-        stripped_source_export.to_excel(writer, sheet_name='Stripped Source', index=False)
-    
-        # Write merged output
-        merged.to_excel(writer, sheet_name='Merged Output', index=False)
+    # Original source sheets
+    for sheet_name, df in source_excel.items():
+        df.to_excel(writer, sheet_name=sheet_name[:31], index=False)
 
+    # Cleaned source sheet without Hierarchy Path or NaNs
+    stripped_source_export = source_df.copy()
+    if 'Hierarchy Path' in stripped_source_export.columns:
+        stripped_source_export.drop(columns=['Hierarchy Path'], inplace=True)
+    stripped_source_export = stripped_source_export.replace("nan", "").replace({pd.NA: "", None: ""}).fillna("")
+    stripped_source_export = stripped_source_export.replace({r'_x000D_': ' ', r'\r': ' ', r'\n': ' '}, regex=True)
+    stripped_source_export.to_excel(writer, sheet_name='Stripped Source', index=False)
+
+    # Final merged result
+    merged.to_excel(writer, sheet_name='Merged Output', index=False)
 
     output.seek(0)
     return output
