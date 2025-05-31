@@ -55,7 +55,8 @@ def process_excel(source_file, test_file):
 
     source_output_columns = [
         col for col in source_df.columns
-        if col not in ['Hierarchy Path', 'XML Tag', 'Level', 'Lvl'] and not (isinstance(col, str) and col.startswith('Unnamed'))
+        if col not in ['Hierarchy Path', 'XML Tag', 'Level', 'Lvl']
+        and not (isinstance(col, str) and col.startswith('Unnamed'))
     ]
 
     merge_columns = ['Hierarchy Path', 'XML Tag'] + source_output_columns
@@ -69,42 +70,25 @@ def process_excel(source_file, test_file):
         suffixes=('', '_source')
     )
 
-    # Track fallback changes
-    fallback_log = []
+    # Build differences
+    differences = []
+    for _, row in merged.iterrows():
+        for col in source_output_columns:
+            test_val = str(row.get(col, "")).strip()
+            source_val = str(row.get(f"{col}_source", "")).strip()
+            if test_val != source_val:
+                differences.append({
+                    "Hierarchy Path": row.get("Hierarchy Path", ""),
+                    "XML Tag": row.get("XML Tag", ""),
+                    "Column": col,
+                    "Test Value": test_val,
+                    "Source Value": source_val
+                })
 
-    for i, row in merged.iterrows():
-        xml_tag = row.get('XML Tag')
-        hierarchy = row.get('Hierarchy Path')
+    differences_df = pd.DataFrame(differences)
 
-        if pd.notna(xml_tag) and str(xml_tag).strip() != "":
-            continue
-        if pd.isna(hierarchy) or str(hierarchy).strip() == "":
-            continue
-
-        fallback_rows = source_df[
-            (source_df['Hierarchy Path'] == hierarchy) &
-            (pd.isna(source_df['XML Tag'])) &
-            (source_df['Lvl'] == row['Lvl']) &
-            (source_df['Name'] == row['Name'])
-        ]
-
-        if not fallback_rows.empty:
-            fallback_row = fallback_rows.iloc[0]
-            for col in source_output_columns:
-                fallback_val = fallback_row.get(col)
-                current_val = merged.at[i, col]
-                if (pd.isna(current_val) or current_val == "") and pd.notna(fallback_val):
-                    merged.at[i, col] = fallback_val
-                    fallback_log.append({
-                        "Row Index": i,
-                        "Hierarchy Path": hierarchy,
-                        "XML Tag": xml_tag,
-                        "Lvl": row.get("Lvl"),
-                        "Name": row.get("Name"),
-                        "Column Name": col,
-                        "Fallback Value": fallback_val,
-                        "Reason": "Missing in test"
-                    })
+    # Build merged without _source columns
+    merged.drop(columns=[f"{col}_source" for col in source_output_columns if f"{col}_source" in merged.columns], inplace=True)
 
     final_columns_order = [col for col in source_df.columns if col != 'Hierarchy Path']
     final_columns_order = [col for col in final_columns_order if col in merged.columns]
@@ -113,26 +97,24 @@ def process_excel(source_file, test_file):
     merged = merged.astype(str).replace("nan", "")
     merged = merged.replace({r'_x000D_': ' ', r'\r': ' ', r'\n': ' '}, regex=True)
 
+    # Cleaned version of source_df (for stripped version)
+    stripped_source_export = source_df.copy()
+    if 'Hierarchy Path' in stripped_source_export.columns:
+        stripped_source_export.drop(columns=['Hierarchy Path'], inplace=True)
+    stripped_source_export = stripped_source_export.replace("nan", "").replace({pd.NA: "", None: ""}).fillna("")
+    stripped_source_export = stripped_source_export.replace({r'_x000D_': ' ', r'\r': ' ', r'\n': ' '}, regex=True)
+
+    # Write to Excel
     output = BytesIO()
     with pd.ExcelWriter(output, engine='openpyxl') as writer:
-        # Write original sheets
+        # Original source sheets
         for sheet_name, df in source_excel.items():
             df.to_excel(writer, sheet_name=sheet_name[:31], index=False)
 
-        # Write stripped source sheet
-        stripped_source_export = source_df.copy()
-        if 'Hierarchy Path' in stripped_source_export.columns:
-            stripped_source_export.drop(columns=['Hierarchy Path'], inplace=True)
-        stripped_source_export = stripped_source_export.replace("nan", "").replace({pd.NA: "", None: ""}).fillna("")
-        stripped_source_export = stripped_source_export.replace({r'_x000D_': ' ', r'\r': ' ', r'\n': ' '}, regex=True)
         stripped_source_export.to_excel(writer, sheet_name='Stripped Source', index=False)
-
-        # Write merged output
         merged.to_excel(writer, sheet_name='Merged Output', index=False)
-
-        # Write fallback log
-        if fallback_log:
-            pd.DataFrame(fallback_log).to_excel(writer, sheet_name='Fallback Log', index=False)
+        if not differences_df.empty:
+            differences_df.to_excel(writer, sheet_name='Differences', index=False)
 
     output.seek(0)
     return output
