@@ -53,79 +53,59 @@ def process_excel(source_file, test_file):
     source_df = build_path_column(source_df)
     test_df = build_path_column(test_df)
 
-    # Columns to keep for comparison
-    excluded_cols = ['Hierarchy Path', 'XML Tag', 'Level', 'Lvl']
-    source_output_columns = [col for col in source_df.columns if col not in excluded_cols and not col.startswith('Unnamed')]
+    # Determine output columns excluding structural
+    source_output_columns = [
+        col for col in source_df.columns
+        if col not in ['Hierarchy Path', 'XML Tag', 'Level', 'Lvl']
+        and not (isinstance(col, str) and col.startswith('Unnamed'))
+    ]
 
     key_cols = ['Hierarchy Path', 'XML Tag']
-    merge_columns = key_cols + source_output_columns
+    source_clean = source_df[key_cols + source_output_columns].drop_duplicates(subset=key_cols)
 
-    source_clean = source_df[merge_columns].drop_duplicates(subset=key_cols)
-    test_clean = test_df.copy()
+    # Merge test data with source data
+    merged = pd.merge(
+        test_df,
+        source_clean,
+        on=key_cols,
+        how='left',
+        suffixes=('', '_source')
+    )
 
-    # Clean columns
-    source_clean = source_clean.fillna("").astype(str).replace("nan", "")
-    test_clean = test_clean.fillna("").astype(str).replace("nan", "")
-
-    # Merge test with source
-    merged = pd.merge(test_clean, source_clean, on=key_cols, how='left', suffixes=('', '_source'))
-
-    # Track differences
+    # Build differences
     differences = []
-
-    # 1. Cell-level differences
+    merged.fillna("", inplace=True)
     for _, row in merged.iterrows():
         for col in source_output_columns:
-            test_val = row.get(col, "").strip()
-            source_val = row.get(f"{col}_source", "").strip()
+            test_val = str(row.get(col, "")).strip()
+            source_val = str(row.get(f"{col}_source", "")).strip()
             if test_val != source_val:
                 differences.append({
                     "Hierarchy Path": row.get("Hierarchy Path", ""),
                     "XML Tag": row.get("XML Tag", ""),
                     "Column": col,
                     "Test Value": test_val,
-                    "Source Value": source_val,
-                    "Type": "Changed"
-                })
-
-    # 2. Identify new rows in test not in source
-    source_keys = set(zip(source_clean['Hierarchy Path'], source_clean['XML Tag']))
-    for _, row in test_clean.iterrows():
-        key = (row['Hierarchy Path'], row['XML Tag'])
-        if key not in source_keys:
-            for col in source_output_columns:
-                differences.append({
-                    "Hierarchy Path": row['Hierarchy Path'],
-                    "XML Tag": row['XML Tag'],
-                    "Column": col,
-                    "Test Value": row.get(col, ""),
-                    "Source Value": "",
-                    "Type": "New in Test"
-                })
-
-    # 3. Identify rows in source missing in test
-    test_keys = set(zip(test_clean['Hierarchy Path'], test_clean['XML Tag']))
-    for _, row in source_clean.iterrows():
-        key = (row['Hierarchy Path'], row['XML Tag'])
-        if key not in test_keys:
-            for col in source_output_columns:
-                differences.append({
-                    "Hierarchy Path": row['Hierarchy Path'],
-                    "XML Tag": row['XML Tag'],
-                    "Column": col,
-                    "Test Value": "",
-                    "Source Value": row.get(col, ""),
-                    "Type": "Missing in Test"
+                    "Source Value": source_val
                 })
 
     differences_df = pd.DataFrame(differences)
 
-    # Clean up merged for final output
+    # Clean up merged dataframe
     merged.drop(columns=[f"{col}_source" for col in source_output_columns if f"{col}_source" in merged.columns], inplace=True)
+
+    # Preserve column order of test_df
+    test_columns_order = [col for col in test_df.columns if col in merged.columns]
+    additional_cols = [col for col in merged.columns if col not in test_columns_order and col not in ['Hierarchy Path']]
+    merged = merged[test_columns_order + additional_cols]
+
+    # Remove 'Hierarchy Path' from merged output (was not there originally)
+    if 'Hierarchy Path' in merged.columns:
+        merged.drop(columns=['Hierarchy Path'], inplace=True)
+
     merged = merged.astype(str).replace("nan", "")
     merged = merged.replace({r'_x000D_': ' ', r'\r': ' ', r'\n': ' '}, regex=True)
 
-    # Cleaned source export as 'Source' sheet only
+    # Stripped and renamed source export
     stripped_source_export = source_df.copy()
     if 'Hierarchy Path' in stripped_source_export.columns:
         stripped_source_export.drop(columns=['Hierarchy Path'], inplace=True)
