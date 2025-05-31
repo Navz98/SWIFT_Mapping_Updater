@@ -70,12 +70,20 @@ def process_excel(source_file, test_file):
         suffixes=('', '_source')
     )
 
+    # === Normalize merged dataframe columns before comparison ===
+    for col in merged.columns:
+        merged[col] = merged[col].replace({pd.NA: "", None: "", "nan": ""}).fillna("").astype(str).str.strip()
+    for col in source_output_columns:
+        col_source = f"{col}_source"
+        if col_source in merged.columns:
+            merged[col_source] = merged[col_source].replace({pd.NA: "", None: "", "nan": ""}).fillna("").astype(str).str.strip()
+
     # Build differences
     differences = []
     for _, row in merged.iterrows():
         for col in source_output_columns:
-            test_val = str(row.get(col, "")).strip()
-            source_val = str(row.get(f"{col}_source", "")).strip()
+            test_val = row.get(col, "")
+            source_val = row.get(f"{col}_source", "")
             if test_val != source_val:
                 differences.append({
                     "Hierarchy Path": row.get("Hierarchy Path", ""),
@@ -94,14 +102,13 @@ def process_excel(source_file, test_file):
     final_columns_order = [col for col in final_columns_order if col in merged.columns]
     merged = merged[final_columns_order]
 
-    merged = merged.astype(str).replace("nan", "")
     merged = merged.replace({r'_x000D_': ' ', r'\r': ' ', r'\n': ' '}, regex=True)
 
     # Cleaned version of source_df (for stripped version)
     stripped_source_export = source_df.copy()
     if 'Hierarchy Path' in stripped_source_export.columns:
         stripped_source_export.drop(columns=['Hierarchy Path'], inplace=True)
-    stripped_source_export = stripped_source_export.replace("nan", "").replace({pd.NA: "", None: ""}).fillna("")
+    stripped_source_export = stripped_source_export.replace({pd.NA: "", None: "", "nan": ""}).fillna("")
     stripped_source_export = stripped_source_export.replace({r'_x000D_': ' ', r'\r': ' ', r'\n': ' '}, regex=True)
 
     # Write to Excel
