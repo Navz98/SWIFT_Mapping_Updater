@@ -110,12 +110,9 @@ def process_excel(source_file, test_file):
     # Write to Excel
     output = BytesIO()
     with pd.ExcelWriter(output, engine='openpyxl') as writer:
-        # Original source sheets
-        for sheet_name, df in source_excel.items():
-            df.to_excel(writer, sheet_name=sheet_name[:31], index=False)
 
-        stripped_source_export.to_excel(writer, sheet_name='Stripped Source', index=False)
-        merged.to_excel(writer, sheet_name='Merged Output', index=False)
+        stripped_source_export.to_excel(writer, sheet_name='Source', index=False)
+        merged.to_excel(writer, sheet_name='New Mapping', index=False)
         if not differences_df.empty:
             differences_df.to_excel(writer, sheet_name='Differences', index=False)
 
