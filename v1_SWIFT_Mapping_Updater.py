@@ -54,10 +54,15 @@ def process_excel(source_file, test_file):
     test_df = build_path_column(test_df)
 
     excluded_cols = ['Hierarchy Path', 'XML Tag', 'Level', 'Lvl']
-    source_output_columns = [col for col in source_df.columns if col not in excluded_cols and not col.startswith('Unnamed')]
 
     key_cols = ['Hierarchy Path', 'XML Tag']
-    merge_columns = key_cols + source_output_columns
+
+    # Get columns present in test sheet (excluding key and unnamed)
+    test_data_cols = [col for col in test_df.columns if col not in key_cols and not col.startswith('Unnamed')]
+
+    # For merging, get source columns for keys + test_data_cols that exist in source
+    source_available_cols = [col for col in test_data_cols if col in source_df.columns]
+    merge_columns = key_cols + source_available_cols
 
     source_clean = source_df[merge_columns].drop_duplicates(subset=key_cols)
     test_clean = test_df.copy()
@@ -70,10 +75,9 @@ def process_excel(source_file, test_file):
     differences = []
 
     for _, row in merged.iterrows():
-        for col in source_output_columns:
+        for col in test_data_cols:
             test_val = str(row.get(col, "")).strip()
             source_val = str(row.get(f"{col}_source", "")).strip()
-
             if test_val != source_val:
                 differences.append({
                     "Hierarchy Path": row.get("Hierarchy Path", ""),
@@ -88,7 +92,7 @@ def process_excel(source_file, test_file):
     for _, row in test_clean.iterrows():
         key = (row['Hierarchy Path'], row['XML Tag'])
         if key not in source_keys:
-            for col in source_output_columns:
+            for col in test_data_cols:
                 differences.append({
                     "Hierarchy Path": row['Hierarchy Path'],
                     "XML Tag": row['XML Tag'],
@@ -102,7 +106,7 @@ def process_excel(source_file, test_file):
     for _, row in source_clean.iterrows():
         key = (row['Hierarchy Path'], row['XML Tag'])
         if key not in test_keys:
-            for col in source_output_columns:
+            for col in test_data_cols:
                 differences.append({
                     "Hierarchy Path": row['Hierarchy Path'],
                     "XML Tag": row['XML Tag'],
@@ -114,7 +118,7 @@ def process_excel(source_file, test_file):
 
     differences_df = pd.DataFrame(differences)
 
-    merged.drop(columns=[f"{col}_source" for col in source_output_columns if f"{col}_source" in merged.columns], inplace=True)
+    merged.drop(columns=[f"{col}_source" for col in test_data_cols if f"{col}_source" in merged.columns], inplace=True)
     if 'Hierarchy Path' in merged.columns:
         merged.drop(columns=['Hierarchy Path'], inplace=True)
     merged = merged.astype(str).replace("nan", "")
