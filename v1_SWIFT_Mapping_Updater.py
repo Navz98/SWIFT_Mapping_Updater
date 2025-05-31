@@ -60,7 +60,8 @@ def process_excel(source_file, test_file):
 
     # Normalize strings: replace nan/None with empty strings for consistent comparison
     for df in [source_df, test_df]:
-        df[source_cols] = df[source_cols].fillna("").astype(str).applymap(str.strip)
+        cols_to_process = [col for col in source_cols if col in df.columns]
+        df[cols_to_process] = df[cols_to_process].fillna("").astype(str).applymap(str.strip)
         df[key_cols] = df[key_cols].fillna("").astype(str).applymap(str.strip)
 
     # Perform full outer merge on keys to capture all rows
