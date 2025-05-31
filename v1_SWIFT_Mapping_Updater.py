@@ -69,6 +69,9 @@ def process_excel(source_file, test_file):
         suffixes=('', '_source')
     )
 
+    # Track fallback changes
+    fallback_log = []
+
     for i, row in merged.iterrows():
         xml_tag = row.get('XML Tag')
         hierarchy = row.get('Hierarchy Path')
@@ -92,6 +95,16 @@ def process_excel(source_file, test_file):
                 current_val = merged.at[i, col]
                 if (pd.isna(current_val) or current_val == "") and pd.notna(fallback_val):
                     merged.at[i, col] = fallback_val
+                    fallback_log.append({
+                        "Row Index": i,
+                        "Hierarchy Path": hierarchy,
+                        "XML Tag": xml_tag,
+                        "Lvl": row.get("Lvl"),
+                        "Name": row.get("Name"),
+                        "Column Name": col,
+                        "Fallback Value": fallback_val,
+                        "Reason": "Missing in test"
+                    })
 
     final_columns_order = [col for col in source_df.columns if col != 'Hierarchy Path']
     final_columns_order = [col for col in final_columns_order if col in merged.columns]
@@ -102,11 +115,11 @@ def process_excel(source_file, test_file):
 
     output = BytesIO()
     with pd.ExcelWriter(output, engine='openpyxl') as writer:
-        # Original source sheets
+        # Write original sheets
         for sheet_name, df in source_excel.items():
             df.to_excel(writer, sheet_name=sheet_name[:31], index=False)
 
-        # Cleaned source sheet without Hierarchy Path or NaNs
+        # Write stripped source sheet
         stripped_source_export = source_df.copy()
         if 'Hierarchy Path' in stripped_source_export.columns:
             stripped_source_export.drop(columns=['Hierarchy Path'], inplace=True)
@@ -114,8 +127,12 @@ def process_excel(source_file, test_file):
         stripped_source_export = stripped_source_export.replace({r'_x000D_': ' ', r'\r': ' ', r'\n': ' '}, regex=True)
         stripped_source_export.to_excel(writer, sheet_name='Stripped Source', index=False)
 
-        # Final merged result
+        # Write merged output
         merged.to_excel(writer, sheet_name='Merged Output', index=False)
+
+        # Write fallback log
+        if fallback_log:
+            pd.DataFrame(fallback_log).to_excel(writer, sheet_name='Fallback Log', index=False)
 
     output.seek(0)
     return output
