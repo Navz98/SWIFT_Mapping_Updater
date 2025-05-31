@@ -101,22 +101,22 @@ def process_excel(source_file, test_file):
     merged = merged.replace({r'_x000D_': ' ', r'\r': ' ', r'\n': ' '}, regex=True)
 
     output = BytesIO()
-with pd.ExcelWriter(output, engine='openpyxl') as writer:
-# Original source sheets
-    for sheet_name, df in source_excel.items():
-        df.to_excel(writer, sheet_name=sheet_name[:31], index=False)
+    with pd.ExcelWriter(output, engine='openpyxl') as writer:
+        # Original source sheets
+        for sheet_name, df in source_excel.items():
+            df.to_excel(writer, sheet_name=sheet_name[:31], index=False)
 
-    # Cleaned source sheet without Hierarchy Path or NaNs
-    stripped_source_export = source_df.copy()
-    if 'Hierarchy Path' in stripped_source_export.columns:
-        stripped_source_export.drop(columns=['Hierarchy Path'], inplace=True)
-    stripped_source_export = stripped_source_export.replace("nan", "").replace({pd.NA: "", None: ""}).fillna("")
-    stripped_source_export = stripped_source_export.replace({r'_x000D_': ' ', r'\r': ' ', r'\n': ' '}, regex=True)
-    stripped_source_export.to_excel(writer, sheet_name='Stripped Source', index=False)
+        # Cleaned source sheet without Hierarchy Path or NaNs
+        stripped_source_export = source_df.copy()
+        if 'Hierarchy Path' in stripped_source_export.columns:
+            stripped_source_export.drop(columns=['Hierarchy Path'], inplace=True)
+        stripped_source_export = stripped_source_export.replace("nan", "").replace({pd.NA: "", None: ""}).fillna("")
+        stripped_source_export = stripped_source_export.replace({r'_x000D_': ' ', r'\r': ' ', r'\n': ' '}, regex=True)
+        stripped_source_export.to_excel(writer, sheet_name='Stripped Source', index=False)
 
-    # Final merged result
-    merged.to_excel(writer, sheet_name='Merged Output', index=False)
-    
+        # Final merged result
+        merged.to_excel(writer, sheet_name='Merged Output', index=False)
+
     output.seek(0)
     return output
 
@@ -131,7 +131,7 @@ if source_file and test_file:
             st.success("Ta Da! Click the below button to download.")
             st.download_button("📥 Download Updated Mapping Sheet", result, file_name="Updated_mapping_sheet.xlsx")
 
-# Footer with trademark text centered at the bottom
+# Footer
 st.markdown("""
     <style>
     .footer {
