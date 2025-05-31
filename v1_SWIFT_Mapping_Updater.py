@@ -53,7 +53,6 @@ def process_excel(source_file, test_file):
     source_df = build_path_column(source_df)
     test_df = build_path_column(test_df)
 
-    # Columns to keep for comparison
     excluded_cols = ['Hierarchy Path', 'XML Tag', 'Level', 'Lvl']
     source_output_columns = [col for col in source_df.columns if col not in excluded_cols and not col.startswith('Unnamed')]
 
@@ -63,17 +62,13 @@ def process_excel(source_file, test_file):
     source_clean = source_df[merge_columns].drop_duplicates(subset=key_cols)
     test_clean = test_df.copy()
 
-    # Clean columns
     source_clean = source_clean.fillna("").astype(str).replace("nan", "")
     test_clean = test_clean.fillna("").astype(str).replace("nan", "")
 
-    # Merge test with source
     merged = pd.merge(test_clean, source_clean, on=key_cols, how='left', suffixes=('', '_source'))
 
-    # Track differences
     differences = []
 
-    # 1. Cell-level differences
     for _, row in merged.iterrows():
         for col in source_output_columns:
             test_val = row.get(col, "").strip()
@@ -88,7 +83,6 @@ def process_excel(source_file, test_file):
                     "Type": "Changed"
                 })
 
-    # 2. Identify new rows in test not in source
     source_keys = set(zip(source_clean['Hierarchy Path'], source_clean['XML Tag']))
     for _, row in test_clean.iterrows():
         key = (row['Hierarchy Path'], row['XML Tag'])
@@ -103,7 +97,6 @@ def process_excel(source_file, test_file):
                     "Type": "New in Test"
                 })
 
-    # 3. Identify rows in source missing in test
     test_keys = set(zip(test_clean['Hierarchy Path'], test_clean['XML Tag']))
     for _, row in source_clean.iterrows():
         key = (row['Hierarchy Path'], row['XML Tag'])
@@ -120,19 +113,18 @@ def process_excel(source_file, test_file):
 
     differences_df = pd.DataFrame(differences)
 
-    # Clean up merged for final output
     merged.drop(columns=[f"{col}_source" for col in source_output_columns if f"{col}_source" in merged.columns], inplace=True)
+    if 'Hierarchy Path' in merged.columns:
+        merged.drop(columns=['Hierarchy Path'], inplace=True)
     merged = merged.astype(str).replace("nan", "")
     merged = merged.replace({r'_x000D_': ' ', r'\r': ' ', r'\n': ' '}, regex=True)
 
-    # Cleaned source export as 'Source' sheet only
     stripped_source_export = source_df.copy()
     if 'Hierarchy Path' in stripped_source_export.columns:
         stripped_source_export.drop(columns=['Hierarchy Path'], inplace=True)
     stripped_source_export = stripped_source_export.replace("nan", "").replace({pd.NA: "", None: ""}).fillna("")
     stripped_source_export = stripped_source_export.replace({r'_x000D_': ' ', r'\r': ' ', r'\n': ' '}, regex=True)
 
-    # Write to Excel
     output = BytesIO()
     with pd.ExcelWriter(output, engine='openpyxl') as writer:
         stripped_source_export.to_excel(writer, sheet_name='Source', index=False)
@@ -143,7 +135,6 @@ def process_excel(source_file, test_file):
     output.seek(0)
     return output
 
-# Streamlit UI
 source_file = st.file_uploader("⬆️ Upload Latest Mapping Excel File", type=[".xlsx"])
 test_file = st.file_uploader("⬆️ Upload SWIFT Excel File", type=[".xlsx"])
 
@@ -154,7 +145,6 @@ if source_file and test_file:
             st.success("Ta Da! Click the below button to download.")
             st.download_button("📥 Download Updated Mapping Sheet", result, file_name="Updated_mapping_sheet.xlsx")
 
-# Footer
 st.markdown("""
     <style>
     .footer {
