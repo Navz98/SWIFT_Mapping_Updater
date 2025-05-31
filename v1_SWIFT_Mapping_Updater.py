@@ -102,9 +102,17 @@ def process_excel(source_file, test_file):
 
     output = BytesIO()
     with pd.ExcelWriter(output, engine='openpyxl') as writer:
+        # Write original source sheets
         for sheet_name, df in source_excel.items():
             df.to_excel(writer, sheet_name=sheet_name[:31], index=False)
+    
+        # ✅ Write stripped and cleaned source data used in merge
+        stripped_source_export = source_df.copy()
+        stripped_source_export.to_excel(writer, sheet_name='Stripped Source', index=False)
+    
+        # Write merged output
         merged.to_excel(writer, sheet_name='Merged Output', index=False)
+
 
     output.seek(0)
     return output
