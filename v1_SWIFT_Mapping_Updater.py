@@ -71,8 +71,9 @@ def process_excel(source_file, test_file):
 
     for _, row in merged.iterrows():
         for col in source_output_columns:
-            test_val = row.get(col, "").strip()
-            source_val = row.get(f"{col}_source", "").strip()
+            test_val = str(row.get(col, "")).strip()
+            source_val = str(row.get(f"{col}_source", "")).strip()
+
             if test_val != source_val:
                 differences.append({
                     "Hierarchy Path": row.get("Hierarchy Path", ""),
