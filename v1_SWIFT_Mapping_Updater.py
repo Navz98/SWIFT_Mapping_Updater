@@ -101,8 +101,8 @@ def process_excel(source_file, test_file):
     merged = merged.replace({r'_x000D_': ' ', r'\r': ' ', r'\n': ' '}, regex=True)
 
     output = BytesIO()
-    with pd.ExcelWriter(output, engine='openpyxl') as writer:
-    # Original source sheets
+with pd.ExcelWriter(output, engine='openpyxl') as writer:
+# Original source sheets
     for sheet_name, df in source_excel.items():
         df.to_excel(writer, sheet_name=sheet_name[:31], index=False)
 
@@ -116,7 +116,7 @@ def process_excel(source_file, test_file):
 
     # Final merged result
     merged.to_excel(writer, sheet_name='Merged Output', index=False)
-
+    
     output.seek(0)
     return output
 
