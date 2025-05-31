@@ -59,48 +59,62 @@ def process_excel(source_file, test_file):
         and not (isinstance(col, str) and col.startswith('Unnamed'))
     ]
 
-    merge_columns = ['Hierarchy Path', 'XML Tag'] + source_output_columns
-    source_clean = source_df[merge_columns].drop_duplicates(subset=['Hierarchy Path', 'XML Tag'])
+    key_cols = ['Hierarchy Path', 'XML Tag']
+    source_clean = source_df[key_cols + source_output_columns].drop_duplicates(subset=key_cols)
 
-    merged = pd.merge(
-        test_df,
-        source_clean,
-        on=['Hierarchy Path', 'XML Tag'],
-        how='left',
-        suffixes=('', '_source')
-    )
+    # Prepare test_df by filtering only relevant columns
+    common_cols = [col for col in source_output_columns if col in test_df.columns]
+    test_prepared = test_df[key_cols + common_cols].copy()
+    test_prepared = test_prepared.fillna("").astype(str).applymap(str.strip)
+    source_clean = source_clean.fillna("").astype(str).applymap(str.strip)
 
-    # 💡 Safe Differences Sheet Logic
+    # Merge for differences
+    merged = pd.merge(test_prepared, source_clean, on=key_cols, how='left', suffixes=('', '_source'))
+
     differences = []
-    test_columns = test_df.columns.tolist()
-    common_output_columns = [col for col in source_output_columns if col in test_columns]
-
     for _, row in merged.iterrows():
-        for col in common_output_columns:
-            test_val = str(row.get(col, "")).strip()
-            source_val = str(row.get(f"{col}_source", "")).strip()
+        for col in common_cols:
+            test_val = row.get(col, "")
+            source_val = row.get(f"{col}_source", "")
             if test_val != source_val:
                 differences.append({
                     "Hierarchy Path": row.get("Hierarchy Path", ""),
                     "XML Tag": row.get("XML Tag", ""),
                     "Column": col,
                     "Test Value": test_val,
-                    "Source Value": source_val
+                    "Source Value": source_val,
+                    "Status": "Modified"
                 })
+
+    # Identify rows in source but missing in test
+    merged_missing = pd.merge(source_clean, test_prepared, on=key_cols, how='left', indicator=True)
+    missing_rows = merged_missing[merged_missing['_merge'] == 'left_only']
+
+    for _, row in missing_rows.iterrows():
+        for col in common_cols:
+            differences.append({
+                "Hierarchy Path": row.get("Hierarchy Path", ""),
+                "XML Tag": row.get("XML Tag", ""),
+                "Column": col,
+                "Test Value": "",
+                "Source Value": row.get(col, ""),
+                "Status": "Missing in Test"
+            })
 
     differences_df = pd.DataFrame(differences)
 
-    # Remove source columns before writing merged
-    merged.drop(columns=[f"{col}_source" for col in source_output_columns if f"{col}_source" in merged.columns], inplace=True)
+    # Final merged output cleanup
+    merged_display = pd.merge(test_df, source_clean, on=key_cols, how='left', suffixes=('', '_source'))
+    merged_display.drop(columns=[f"{col}_source" for col in common_cols if f"{col}_source" in merged_display.columns], inplace=True)
 
     final_columns_order = [col for col in source_df.columns if col != 'Hierarchy Path']
-    final_columns_order = [col for col in final_columns_order if col in merged.columns]
-    merged = merged[final_columns_order]
+    final_columns_order = [col for col in final_columns_order if col in merged_display.columns]
+    merged_display = merged_display[final_columns_order]
 
-    merged = merged.astype(str).replace("nan", "")
-    merged = merged.replace({r'_x000D_': ' ', r'\r': ' ', r'\n': ' '}, regex=True)
+    merged_display = merged_display.astype(str).replace("nan", "")
+    merged_display = merged_display.replace({r'_x000D_': ' ', r'\r': ' ', r'\n': ' '}, regex=True)
 
-    # Stripped source export
+    # Prepare stripped source as 'Source'
     stripped_source_export = source_df.copy()
     if 'Hierarchy Path' in stripped_source_export.columns:
         stripped_source_export.drop(columns=['Hierarchy Path'], inplace=True)
@@ -110,9 +124,8 @@ def process_excel(source_file, test_file):
     # Write to Excel
     output = BytesIO()
     with pd.ExcelWriter(output, engine='openpyxl') as writer:
-
         stripped_source_export.to_excel(writer, sheet_name='Source', index=False)
-        merged.to_excel(writer, sheet_name='New Mapping', index=False)
+        merged_display.to_excel(writer, sheet_name='Merged Output', index=False)
         if not differences_df.empty:
             differences_df.to_excel(writer, sheet_name='Differences', index=False)
 
@@ -126,12 +139,9 @@ test_file = st.file_uploader("⬆️ Upload SWIFT Excel File", type=[".xlsx"])
 if source_file and test_file:
     if st.button("Do the trick ✨"):
         with st.spinner("🥁 Drum Rolls..."):
-            try:
-                result = process_excel(source_file, test_file)
-                st.success("Ta Da! Click the below button to download.")
-                st.download_button("📥 Download Updated Mapping Sheet", result, file_name="Updated_mapping_sheet.xlsx")
-            except Exception as e:
-                st.error(f"An error occurred: {e}")
+            result = process_excel(source_file, test_file)
+            st.success("Ta Da! Click the below button to download.")
+            st.download_button("📥 Download Updated Mapping Sheet", result, file_name="Updated_mapping_sheet.xlsx")
 
 # Footer
 st.markdown("""
