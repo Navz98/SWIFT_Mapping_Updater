@@ -147,8 +147,6 @@ def process_excel(source_file, test_file):
         if not differences_df.empty:
             differences_df.to_excel(writer, sheet_name='Differences', index=False)
 
-        writer.book.save(writer.path)
-
     output.seek(0)
     wb = load_workbook(output)
     ws = wb["New Mapping"]
