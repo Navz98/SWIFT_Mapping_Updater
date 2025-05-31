@@ -119,10 +119,7 @@ def process_excel(source_file, test_file):
 
     differences_df = pd.DataFrame(differences)
 
-    # Prepare merged output
     merged.drop(columns=[f"{col}_source" for col in source_output_columns if f"{col}_source" in merged.columns], inplace=True)
-    if 'Hierarchy Path' in merged.columns:
-        merged.drop(columns=['Hierarchy Path'], inplace=True)
     merged = merged.astype(str).replace("nan", "")
     merged = merged.replace({r'_x000D_': ' ', r'\r': ' ', r'\n': ' '}, regex=True)
 
@@ -132,7 +129,6 @@ def process_excel(source_file, test_file):
     stripped_source_export = stripped_source_export.replace("nan", "").replace({pd.NA: "", None: ""}).fillna("")
     stripped_source_export = stripped_source_export.replace({r'_x000D_': ' ', r'\r': ' ', r'\n': ' '}, regex=True)
 
-    # Write to Excel
     output = BytesIO()
     with pd.ExcelWriter(output, engine='openpyxl') as writer:
         stripped_source_export.to_excel(writer, sheet_name='Source', index=False)
@@ -140,39 +136,29 @@ def process_excel(source_file, test_file):
         if not differences_df.empty:
             differences_df.to_excel(writer, sheet_name='Differences', index=False)
 
-        # Legend
-        legend_df = pd.DataFrame({
-            "Description": ["Changed value", "New row in Test", "Missing in Test"],
-            "Color": ["Yellow", "Light Blue", "Light Red"]
-        })
-        legend_df.to_excel(writer, sheet_name='Legend', index=False)
+        writer.book.save(writer.path)
 
-    # Add highlights
+    # Reopen workbook for coloring
     output.seek(0)
     wb = load_workbook(output)
     ws = wb["New Mapping"]
+    header_map = {cell.value: idx + 1 for idx, cell in enumerate(ws[1])}
 
-    headers = {cell.value: idx for idx, cell in enumerate(next(ws.iter_rows(min_row=1, max_row=1)), start=1)}
+    yellow = PatternFill(start_color="FFFF00", end_color="FFFF00", fill_type="solid")
+    blue = PatternFill(start_color="ADD8E6", end_color="ADD8E6", fill_type="solid")
+    red = PatternFill(start_color="FF6347", end_color="FF6347", fill_type="solid")
 
-    # Colors
-    yellow = PatternFill(start_color="FFFF00", end_color="FFFF00", fill_type="solid")  # Changed
-    blue = PatternFill(start_color="ADD8E6", end_color="ADD8E6", fill_type="solid")    # New
-    red = PatternFill(start_color="FFC7CE", end_color="FFC7CE", fill_type="solid")     # Missing
-
-    for _, diff in differences_df.iterrows():
+    for diff in differences:
         path = str(diff["Hierarchy Path"]).strip()
         tag = str(diff["XML Tag"]).strip()
         column = str(diff["Column"]).strip()
         dtype = diff["Type"]
-
-        col_idx = headers.get(column)
+        col_idx = header_map.get(column)
         if not col_idx:
-            continue  # skip if column isn't found
-
-        for row in ws.iter_rows(min_row=2):  # skip header
-            row_path = str(row[headers.get("Hierarchy Path", 0) - 1].value).strip()
-            row_tag = str(row[headers.get("XML Tag", 0) - 1].value).strip()
-
+            continue
+        for row in ws.iter_rows(min_row=2):
+            row_path = str(row[header_map["Hierarchy Path"] - 1].value).strip()
+            row_tag = str(row[header_map["XML Tag"] - 1].value).strip()
             if row_path == path and row_tag == tag:
                 cell = row[col_idx - 1]
                 if dtype == "Changed":
@@ -181,15 +167,13 @@ def process_excel(source_file, test_file):
                     cell.fill = blue
                 elif dtype == "Missing in Test":
                     cell.fill = red
-                break  # once match is found, break inner loop
-
+                break
 
     final_output = BytesIO()
     wb.save(final_output)
     final_output.seek(0)
     return final_output
 
-# Streamlit UI
 source_file = st.file_uploader("⬆️ Upload Latest Mapping Excel File", type=[".xlsx"])
 test_file = st.file_uploader("⬆️ Upload SWIFT Excel File", type=[".xlsx"])
 
@@ -200,7 +184,6 @@ if source_file and test_file:
             st.success("Ta Da! Click the below button to download.")
             st.download_button("📥 Download Updated Mapping Sheet", result, file_name="Updated_mapping_sheet.xlsx")
 
-# Footer
 st.markdown("""
     <style>
     .footer {
