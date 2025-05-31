@@ -1,6 +1,8 @@
 import streamlit as st
 import pandas as pd
 from io import BytesIO
+from openpyxl import load_workbook
+from openpyxl.styles import PatternFill
 
 st.set_page_config(page_title="Mapping Sheet Updater", layout="wide")
 st.title("SWIFT Mapping Sheet Updater")
@@ -124,7 +126,6 @@ def process_excel(source_file, test_file):
     merged = merged.astype(str).replace("nan", "")
     merged = merged.replace({r'_x000D_': ' ', r'\r': ' ', r'\n': ' '}, regex=True)
 
-    # Clean source for export
     stripped_source_export = source_df.copy()
     if 'Hierarchy Path' in stripped_source_export.columns:
         stripped_source_export.drop(columns=['Hierarchy Path'], inplace=True)
@@ -139,8 +140,50 @@ def process_excel(source_file, test_file):
         if not differences_df.empty:
             differences_df.to_excel(writer, sheet_name='Differences', index=False)
 
+        # Legend
+        legend_df = pd.DataFrame({
+            "Description": ["Changed value", "New row in Test", "Missing in Test"],
+            "Color": ["Yellow", "Light Blue", "Light Red"]
+        })
+        legend_df.to_excel(writer, sheet_name='Legend', index=False)
+
+    # Add highlights
     output.seek(0)
-    return output
+    wb = load_workbook(output)
+    ws = wb["New Mapping"]
+
+    headers = {cell.value: idx for idx, cell in enumerate(next(ws.iter_rows(min_row=1, max_row=1)), start=1)}
+
+    # Colors
+    yellow = PatternFill(start_color="FFFF00", end_color="FFFF00", fill_type="solid")  # Changed
+    blue = PatternFill(start_color="ADD8E6", end_color="ADD8E6", fill_type="solid")    # New
+    red = PatternFill(start_color="FFC7CE", end_color="FFC7CE", fill_type="solid")     # Missing
+
+    for _, diff in differences_df.iterrows():
+        path = diff["Hierarchy Path"]
+        tag = diff["XML Tag"]
+        column = diff["Column"]
+        dtype = diff["Type"]
+
+        for row in ws.iter_rows(min_row=2):  # Skip header
+            row_path = row[headers.get("Hierarchy Path", 0) - 1].value
+            row_tag = row[headers.get("XML Tag", 0) - 1].value
+
+            if row_path == path and row_tag == tag:
+                col_idx = headers.get(column)
+                if col_idx:
+                    cell = row[col_idx - 1]
+                    if dtype == "Changed":
+                        cell.fill = yellow
+                    elif dtype == "New in Test":
+                        cell.fill = blue
+                    elif dtype == "Missing in Test":
+                        cell.fill = red
+
+    final_output = BytesIO()
+    wb.save(final_output)
+    final_output.seek(0)
+    return final_output
 
 # Streamlit UI
 source_file = st.file_uploader("⬆️ Upload Latest Mapping Excel File", type=[".xlsx"])
