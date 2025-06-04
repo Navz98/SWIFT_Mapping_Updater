@@ -5,7 +5,7 @@ from openpyxl import load_workbook
 from openpyxl.styles import PatternFill
 
 st.set_page_config(page_title="Mapping Sheet Updater", layout="wide")
-st.title("SWIFT Mapping Sheet Updater")
+st.title("Mapping Sheet Updater")
 
 def strip_all_string_columns(df):
     for col in df.columns:
@@ -186,8 +186,8 @@ def process_excel(source_file, test_file):
     final_output.seek(0)
     return final_output
 
-source_file = st.file_uploader("⬆️ Upload Latest Mapping Excel File", type=[".xlsx"])
-test_file = st.file_uploader("⬆️ Upload SWIFT Excel File", type=[".xlsx"])
+source_file = st.file_uploader("⬆️ Upload Source Mapping Excel File", type=[".xlsx"])
+test_file = st.file_uploader("⬆️ Upload Target Excel File", type=[".xlsx"])
 
 if source_file and test_file:
     if st.button("Do the trick ✨"):
