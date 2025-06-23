@@ -184,6 +184,10 @@ def process_excel(source_file, test_file):
     stripped_source_export = stripped_source_export.replace("nan", "").replace({pd.NA: "", None: ""}).fillna("")
     stripped_source_export = stripped_source_export.replace({r'_x000D_': ' ', r'\r': ' ', r'\n': ' '}, regex=True)
 
+    # Remove helper columns from export
+    merged.drop(columns=['Parent-Child Key'], errors='ignore', inplace=True)
+    stripped_source_export.drop(columns=['Parent-Child Key'], errors='ignore', inplace=True)
+
     output = BytesIO()
     with pd.ExcelWriter(output, engine='openpyxl') as writer:
         stripped_source_export.to_excel(writer, sheet_name='Source', index=False)
