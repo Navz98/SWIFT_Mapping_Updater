@@ -16,6 +16,7 @@ def strip_all_string_columns(df):
 def build_path_column(df):
     path_stack = {}
     full_paths = []
+    parent_child_keys = []
 
     for _, row in df.iterrows():
         level = row.get('Lvl')
@@ -24,6 +25,7 @@ def build_path_column(df):
 
         if pd.isna(level):
             full_paths.append(None)
+            parent_child_keys.append(None)
             continue
 
         level = int(level)
@@ -38,7 +40,15 @@ def build_path_column(df):
         path = " > ".join([path_stack[lvl] for lvl in sorted_levels])
         full_paths.append(path)
 
+        meaningful_tags = [path_stack[lvl] for lvl in sorted_levels if path_stack[lvl]]
+        if len(meaningful_tags) >= 2:
+            parent_child_key = " > ".join(meaningful_tags[-2:])
+        else:
+            parent_child_key = path
+        parent_child_keys.append(parent_child_key)
+
     df['Hierarchy Path'] = full_paths
+    df['Parent-Child Key'] = parent_child_keys
     return df
 
 def process_excel(source_file, test_file):
@@ -55,7 +65,8 @@ def process_excel(source_file, test_file):
     test_df = build_path_column(test_df)
 
     key_cols = ['Hierarchy Path', 'XML Tag']
-    excluded_cols = key_cols + ['Level', 'Lvl']
+    parent_child_key_col = 'Parent-Child Key'
+    excluded_cols = key_cols + [parent_child_key_col, 'Level', 'Lvl']
 
     source_output_columns = [col for col in source_df.columns if col not in excluded_cols and not col.startswith('Unnamed')]
     test_output_columns = [col for col in test_df.columns if col not in excluded_cols and not col.startswith('Unnamed')]
@@ -72,7 +83,6 @@ def process_excel(source_file, test_file):
 
     differences = []
 
-    # 1. Cell-level differences (using test sheet columns only)
     for _, row in merged.iterrows():
         for col in test_output_columns:
             test_val = str(row.get(col, "")).strip()
@@ -87,7 +97,6 @@ def process_excel(source_file, test_file):
                     "Type": "Changed"
                 })
 
-    # 2. New rows in test
     source_keys = set(zip(source_clean['Hierarchy Path'], source_clean['XML Tag']))
     for _, row in test_clean.iterrows():
         key = (row['Hierarchy Path'], row['XML Tag'])
@@ -102,7 +111,6 @@ def process_excel(source_file, test_file):
                     "Type": "New in Test"
                 })
 
-    # 3. Missing rows in test
     test_keys = set(zip(test_clean['Hierarchy Path'], test_clean['XML Tag']))
     for _, row in source_clean.iterrows():
         key = (row['Hierarchy Path'], row['XML Tag'])
@@ -117,10 +125,26 @@ def process_excel(source_file, test_file):
                     "Type": "Missing in Test"
                 })
 
-    differences_df = pd.DataFrame(differences)
+    # Fallback matching using Parent-Child Key
+    source_fallback = source_df[[parent_child_key_col, 'XML Tag'] + source_output_columns].drop_duplicates()
+    test_fallback = test_df[[parent_child_key_col, 'XML Tag'] + test_output_columns]
 
-    # IMPORTANT: Do NOT drop 'Hierarchy Path' here, keep it for coloring
-    # merged.drop(columns=['Hierarchy Path'], inplace=True)  # <-- Commented out to keep column for coloring
+    fallback_merged = pd.merge(test_fallback, source_fallback, on=[parent_child_key_col, 'XML Tag'], how='inner', suffixes=('', '_source'))
+    for _, row in fallback_merged.iterrows():
+        for col in test_output_columns:
+            test_val = str(row.get(col, "")).strip()
+            source_val = str(row.get(f"{col}_source", "")).strip()
+            if test_val != source_val:
+                differences.append({
+                    "Hierarchy Path": "",
+                    "XML Tag": row.get("XML Tag", ""),
+                    "Column": col,
+                    "Test Value": test_val,
+                    "Source Value": source_val,
+                    "Type": "Changed (Fallback)"
+                })
+
+    differences_df = pd.DataFrame(differences)
 
     merged.drop(columns=[f"{col}_source" for col in source_output_columns if f"{col}_source" in merged.columns], inplace=True)
     merged = merged.astype(str).replace("nan", "")
@@ -138,11 +162,10 @@ def process_excel(source_file, test_file):
         merged.to_excel(writer, sheet_name='New Mapping', index=False)
         if not differences_df.empty:
             differences_df.to_excel(writer, sheet_name='Differences', index=False)
-                
-        # Add the Legend sheet explaining colors
+
         legend_df = pd.DataFrame({
-            "Color": ["Yellow", "Blue", "Red"],
-            "Meaning": ["Changed", "New in Test", "Missing in Test"]
+            "Color": ["Yellow", "Blue", "Red", "Green"],
+            "Meaning": ["Changed", "New in Test", "Missing in Test", "Changed (Fallback)"]
         })
         legend_df.to_excel(writer, sheet_name="Legend", index=False)
 
@@ -154,9 +177,9 @@ def process_excel(source_file, test_file):
     yellow = PatternFill(start_color="FFFF00", end_color="FFFF00", fill_type="solid")
     blue = PatternFill(start_color="ADD8E6", end_color="ADD8E6", fill_type="solid")
     red = PatternFill(start_color="FF6347", end_color="FF6347", fill_type="solid")
+    green = PatternFill(start_color="90EE90", end_color="90EE90", fill_type="solid")
 
     for diff in differences:
-        path = str(diff["Hierarchy Path"]).strip()
         tag = str(diff["XML Tag"]).strip()
         column = str(diff["Column"]).strip()
         dtype = diff["Type"]
@@ -164,10 +187,8 @@ def process_excel(source_file, test_file):
         if not col_idx:
             continue
         for row in ws.iter_rows(min_row=2):
-            # Match rows by Hierarchy Path and XML Tag
-            row_path = str(row[header_map["Hierarchy Path"] - 1].value).strip()
             row_tag = str(row[header_map["XML Tag"] - 1].value).strip()
-            if row_path == path and row_tag == tag:
+            if row_tag == tag:
                 cell = row[col_idx - 1]
                 if dtype == "Changed":
                     cell.fill = yellow
@@ -175,9 +196,10 @@ def process_excel(source_file, test_file):
                     cell.fill = blue
                 elif dtype == "Missing in Test":
                     cell.fill = red
+                elif dtype == "Changed (Fallback)":
+                    cell.fill = green
                 break
 
-    # Now remove the 'Hierarchy Path' column from the worksheet AFTER coloring
     if 'Hierarchy Path' in header_map:
         ws.delete_cols(header_map['Hierarchy Path'])
 
@@ -194,21 +216,3 @@ if source_file and test_file:
         with st.spinner("🥁 Drum Rolls..."):
             result = process_excel(source_file, test_file)
             st.success("Ta Da! Click the below button to download.")
-            st.download_button("📥 Download Updated Mapping Sheet", result, file_name="Updated_mapping_sheet.xlsx")
-
-st.markdown("""
-    <style>
-    .footer {
-        position: fixed;
-        bottom: 10px;
-        width: 100%;
-        text-align: center;
-        color: grey;
-        font-size: 0.9rem;
-        font-family: 'Courier New', monospace;
-    }
-    </style>
-    <div class="footer">
-         🧘‍♂️ Designed By Naveen 🧘‍♂️
-    </div>
-""", unsafe_allow_html=True)
