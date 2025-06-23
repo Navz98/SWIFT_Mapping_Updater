@@ -72,7 +72,6 @@ def process_excel(source_file, test_file):
     test_output_columns = [col for col in test_df.columns if col not in excluded_cols and not col.startswith('Unnamed')]
 
     merge_columns = key_cols + source_output_columns
-
     source_clean = source_df[merge_columns].drop_duplicates(subset=key_cols)
     test_clean = test_df.copy()
 
@@ -83,7 +82,7 @@ def process_excel(source_file, test_file):
 
     differences = []
 
-    # 1. Exact match
+    # 1. Exact Match
     for col in test_output_columns:
         source_col = f"{col}_source"
         if source_col in merged.columns:
@@ -98,7 +97,7 @@ def process_excel(source_file, test_file):
                     "Type": "Changed"
                 })
 
-    # 2. New and Missing rows
+    # 2. New and Missing Rows
     source_keys = set(zip(source_clean['Hierarchy Path'], source_clean['XML Tag']))
     test_keys = set(zip(test_clean['Hierarchy Path'], test_clean['XML Tag']))
 
@@ -128,7 +127,7 @@ def process_excel(source_file, test_file):
                     "Type": "Missing in Test"
                 })
 
-    # 3. Parent-Child fallback
+    # 3. Fallback by Parent-Child Key
     unmatched_keys = test_keys - source_keys
     test_unmatched = test_df[test_df.apply(lambda x: (x['Hierarchy Path'], x['XML Tag']) in unmatched_keys, axis=1)]
 
@@ -152,7 +151,7 @@ def process_excel(source_file, test_file):
                     "Type": "Changed (Fallback)"
                 })
 
-    # 4. Loose fallback — tag-only match, if tag is unique in both source and test
+    # 4. Loose Fallback by XML Tag (Unique Only)
     source_counts = source_df['XML Tag'].value_counts()
     test_counts = test_df['XML Tag'].value_counts()
 
@@ -163,8 +162,8 @@ def process_excel(source_file, test_file):
         test_row = test_df[test_df['XML Tag'] == tag].iloc[0]
         source_row = source_df[source_df['XML Tag'] == tag].iloc[0]
         for col in test_output_columns:
-            test_val = test_row.get(col, "").strip()
-            source_val = source_row.get(col, "").strip()
+            test_val = str(test_row[col]).strip() if col in test_row else ""
+            source_val = str(source_row[col]).strip() if col in source_row else ""
             if test_val != source_val:
                 differences.append({
                     "Hierarchy Path": "",
@@ -228,7 +227,7 @@ def process_excel(source_file, test_file):
     final_output.seek(0)
     return final_output
 
-# UI components
+# UI
 source_file = st.file_uploader("⬆️ Upload Source Mapping Excel File", type=[".xlsx"])
 test_file = st.file_uploader("⬆️ Upload Target Excel File", type=[".xlsx"])
 
@@ -239,7 +238,6 @@ if source_file and test_file:
             st.success("Ta Da! Click the below button to download.")
             st.download_button("📥 Download Updated Mapping Sheet", result, file_name="Updated_mapping_sheet.xlsx")
 
-# Footer
 st.markdown("""
     <style>
     .footer {
