@@ -82,7 +82,7 @@ def process_excel(source_file, test_file):
 
     differences = []
 
-    # 1. Exact Match
+    # 1. Exact Differences
     for col in test_output_columns:
         source_col = f"{col}_source"
         if source_col in merged.columns:
@@ -97,7 +97,7 @@ def process_excel(source_file, test_file):
                     "Type": "Changed"
                 })
 
-    # 2. New and Missing Rows
+    # 2. New rows in test
     source_keys = set(zip(source_clean['Hierarchy Path'], source_clean['XML Tag']))
     test_keys = set(zip(test_clean['Hierarchy Path'], test_clean['XML Tag']))
 
@@ -114,6 +114,7 @@ def process_excel(source_file, test_file):
                     "Type": "New in Test"
                 })
 
+    # 3. Missing rows in test (exclude from New Mapping)
     for _, row in source_clean.iterrows():
         key = (row['Hierarchy Path'], row['XML Tag'])
         if key not in test_keys:
@@ -127,7 +128,7 @@ def process_excel(source_file, test_file):
                     "Type": "Missing in Test"
                 })
 
-    # 3. Fallback by Parent-Child Key
+    # 4. Fallback via Parent-Child Key — differences only
     unmatched_keys = test_keys - source_keys
     test_unmatched = test_df[test_df.apply(lambda x: (x['Hierarchy Path'], x['XML Tag']) in unmatched_keys, axis=1)]
 
@@ -151,42 +152,17 @@ def process_excel(source_file, test_file):
                     "Type": "Changed (Fallback)"
                 })
 
-    # 4. Loose Fallback by XML Tag (Unique Only)
-    source_counts = source_df['XML Tag'].value_counts()
-    test_counts = test_df['XML Tag'].value_counts()
-
-    unique_tags = [tag for tag in test_counts.index
-                   if test_counts[tag] == 1 and source_counts.get(tag, 0) == 1]
-
-    for tag in unique_tags:
-        test_row = test_df[test_df['XML Tag'] == tag].iloc[0]
-        source_row = source_df[source_df['XML Tag'] == tag].iloc[0]
-        for col in test_output_columns:
-            test_val = str(test_row[col]).strip() if col in test_row else ""
-            source_val = str(source_row[col]).strip() if col in source_row else ""
-            if test_val != source_val:
-                differences.append({
-                    "Hierarchy Path": "",
-                    "XML Tag": tag,
-                    "Column": col,
-                    "Test Value": test_val,
-                    "Source Value": source_val,
-                    "Type": "Changed (Loose Match)"
-                })
-
     differences_df = pd.DataFrame(differences)
 
+    # Clean merged output for export
     merged.drop(columns=[f"{col}_source" for col in source_output_columns if f"{col}_source" in merged.columns], inplace=True)
+    merged.drop(columns=['Parent-Child Key'], errors='ignore', inplace=True)
     merged = merged.astype(str).replace("nan", "")
     merged = merged.replace({r'_x000D_': ' ', r'\r': ' ', r'\n': ' '}, regex=True)
 
-    stripped_source_export = source_df.drop(columns=['Hierarchy Path'], errors='ignore')
+    stripped_source_export = source_df.drop(columns=['Hierarchy Path', 'Parent-Child Key'], errors='ignore')
     stripped_source_export = stripped_source_export.replace("nan", "").replace({pd.NA: "", None: ""}).fillna("")
     stripped_source_export = stripped_source_export.replace({r'_x000D_': ' ', r'\r': ' ', r'\n': ' '}, regex=True)
-
-    # Remove helper columns from export
-    merged.drop(columns=['Parent-Child Key'], errors='ignore', inplace=True)
-    stripped_source_export.drop(columns=['Parent-Child Key'], errors='ignore', inplace=True)
 
     output = BytesIO()
     with pd.ExcelWriter(output, engine='openpyxl') as writer:
@@ -195,8 +171,8 @@ def process_excel(source_file, test_file):
         if not differences_df.empty:
             differences_df.to_excel(writer, sheet_name='Differences', index=False)
         pd.DataFrame({
-            "Color": ["Yellow", "Blue", "Red", "Green", "Light Green"],
-            "Meaning": ["Changed", "New in Test", "Missing in Test", "Changed (Fallback)", "Changed (Loose Match)"]
+            "Color": ["Yellow", "Blue", "Red", "Green"],
+            "Meaning": ["Changed", "New in Test", "Missing in Test", "Changed (Fallback)"]
         }).to_excel(writer, sheet_name="Legend", index=False)
 
     output.seek(0)
@@ -208,8 +184,7 @@ def process_excel(source_file, test_file):
         "Changed": PatternFill(start_color="FFFF00", end_color="FFFF00", fill_type="solid"),
         "New in Test": PatternFill(start_color="ADD8E6", end_color="ADD8E6", fill_type="solid"),
         "Missing in Test": PatternFill(start_color="FF6347", end_color="FF6347", fill_type="solid"),
-        "Changed (Fallback)": PatternFill(start_color="90EE90", end_color="90EE90", fill_type="solid"),
-        "Changed (Loose Match)": PatternFill(start_color="CCFFCC", end_color="CCFFCC", fill_type="solid")
+        "Changed (Fallback)": PatternFill(start_color="90EE90", end_color="90EE90", fill_type="solid")
     }
 
     for diff in differences:
@@ -231,7 +206,7 @@ def process_excel(source_file, test_file):
     final_output.seek(0)
     return final_output
 
-# UI
+# Streamlit UI
 source_file = st.file_uploader("⬆️ Upload Source Mapping Excel File", type=[".xlsx"])
 test_file = st.file_uploader("⬆️ Upload Target Excel File", type=[".xlsx"])
 
